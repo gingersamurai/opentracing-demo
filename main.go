@@ -3,13 +3,16 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/opentracing/opentracing-go"
-	"github.com/uber/jaeger-client-go/config"
 	"log"
 	"time"
+
+	"github.com/opentracing/opentracing-go"
+	"github.com/spf13/viper"
+	"github.com/uber/jaeger-client-go/config"
 )
 
 func main() {
+	viper.AutomaticEnv()
 	cfg := config.Configuration{
 		ServiceName: "test-service",
 		Sampler: &config.SamplerConfig{
@@ -17,8 +20,8 @@ func main() {
 			Param: 1,
 		},
 		Reporter: &config.ReporterConfig{
-			LogSpans:           true,
-			LocalAgentHostPort: "jaeger:6831",
+			LogSpans:          true,
+			CollectorEndpoint: viper.GetString("JAEGER_ENDPOINT"),
 		},
 	}
 
@@ -26,16 +29,18 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	defer closer.Close()
-
+	defer func() {
+		_ = closer.Close()
+	}()
 	opentracing.SetGlobalTracer(tracer)
-	for i := 0; i < 100; i++ {
-		spanName := fmt.Sprintf("test-operation-%d", i)
-		log.Println(spanName, "started")
+
+	num := 1
+	for {
+		spanName := fmt.Sprintf("test-operation-%d-%s", num, time.Now().String())
 		span, _ := opentracing.StartSpanFromContext(context.Background(), spanName)
-		time.Sleep(1 * time.Second)
+		time.Sleep(viper.GetDuration("INTERVAL"))
 		span.Finish()
 		log.Println(spanName, "finished")
+		num++
 	}
-	time.Sleep(50 * time.Second)
 }
